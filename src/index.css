@@ -180,6 +180,7 @@ button, input, select {
   border: 1px solid var(--border-color);
   padding: 8px;
   min-height: 0; /* Nested scrolling */
+  overflow: hidden; /* contain children */
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   position: relative;
 }
@@ -377,28 +378,24 @@ button, input, select {
 /* Streaks Dots display */
 .streak-grid {
   display: flex;
-  gap: 3px;
+  gap: 4px;
   align-items: center;
+  flex-shrink: 0;
 }
 
-.streak-day-dot {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  position: relative;
-  cursor: pointer;
-}
-
+/* Streak circle: label now inside the circle */
 .streak-circle {
-  width: 16px;
-  height: 16px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  border: 1px solid var(--border-color);
+  border: 1.5px solid var(--border-color);
   background: var(--card-bg);
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .streak-circle.done {
@@ -416,13 +413,26 @@ button, input, select {
   box-shadow: 0 1px 4px rgba(0,0,0,0.1);
 }
 
-.streak-label {
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  margin-top: 1px;
+/* Label rendered inside circle */
+.streak-label-inside {
+  font-size: 0.6rem;
+  font-weight: 700;
   text-transform: uppercase;
-  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-muted);
   user-select: none;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.streak-circle.done .streak-label-inside,
+.streak-circle.missed .streak-label-inside {
+  color: white;
+}
+
+/* Legacy label below – keep hidden in case it is still rendered */
+.streak-label {
+  display: none;
 }
 
 /* Habit config icons */
@@ -875,3 +885,64 @@ button, input, select {
   filter: brightness(0.95);
 }
 
+/* Modal Subtask List (add/edit modal) */
+.modal-subtask-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 4px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.modal-subtask-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-beige);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px 10px;
+  gap: 6px;
+}
+
+.modal-subtask-name {
+  font-size: 0.9rem;
+  color: var(--text-slate);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Zoom / pinch fix: prevent elements from clipping at narrower viewport widths */
+.habit-name {
+  min-width: 0;
+}
+
+.habit-meta {
+  flex-shrink: 0;
+}
+
+/* Better touch targets on mobile */
+@media (max-width: 600px) {
+  .streak-circle {
+    width: 28px;
+    height: 28px;
+  }
+
+  .streak-label-inside {
+    font-size: 0.58rem;
+  }
+
+  .category-section {
+    min-height: 160px;
+    max-height: none;
+  }
+
+  .modal-content {
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+}

@@ -74,6 +74,9 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState('local'); // 'local' | 'syncing' | 'synced' | 'error'
   const [expandedHabits, setExpandedHabits] = useState({});
   const [subtaskInputs, setSubtaskInputs] = useState({});
+  // Subtasks in the add/edit modal form
+  const [modalSubtasks, setModalSubtasks] = useState([]);
+  const [modalSubtaskInput, setModalSubtaskInput] = useState('');
   
   // Forms States
   const [newHabitName, setNewHabitName] = useState('');
@@ -356,6 +359,7 @@ export default function App() {
       recurring: newHabitRecurring,
       recurInterval: newHabitRecurring === 'every-x-days' ? newHabitRecurInterval : null,
       reminderTime: newHabitReminderTime || null,
+      subtasks: modalSubtasks.map((s, i) => ({ id: `${Date.now()}_${i}`, name: s })),
       createdAt: Date.now(),
       order: habits.length
     };
@@ -366,6 +370,8 @@ export default function App() {
     // Reset form
     setNewHabitName('');
     setNewHabitReminderTime('');
+    setModalSubtasks([]);
+    setModalSubtaskInput('');
     setActiveModal(null);
     
     triggerSync(updatedHabits, history);
@@ -384,7 +390,10 @@ export default function App() {
           category: newHabitCategory,
           recurring: newHabitRecurring,
           recurInterval: newHabitRecurring === 'every-x-days' ? newHabitRecurInterval : null,
-          reminderTime: newHabitReminderTime || null
+          reminderTime: newHabitReminderTime || null,
+          subtasks: modalSubtasks.map((s, i) => 
+            typeof s === 'object' ? s : { id: `${Date.now()}_${i}`, name: s }
+          )
         };
       }
       return h;
@@ -396,6 +405,8 @@ export default function App() {
     
     setNewHabitName('');
     setNewHabitReminderTime('');
+    setModalSubtasks([]);
+    setModalSubtaskInput('');
 
     triggerSync(updatedHabits, history);
   };
@@ -674,14 +685,20 @@ export default function App() {
                               <Check className="check-icon" />
                             </div>
 
-                            {/* Clickable Area for Expansion */}
-                            <div className="habit-clickable-area" onClick={() => toggleExpandHabit(habit.id)}>
-                              <ChevronRight className={`expand-toggle-icon ${expandedHabits[habit.id] ? 'expanded' : ''}`} />
+                            {/* Clickable Area for Expansion — only show chevron if has subtasks */}
+                            <div 
+                              className="habit-clickable-area" 
+                              onClick={() => (habit.subtasks || []).length > 0 && toggleExpandHabit(habit.id)}
+                              style={{ cursor: (habit.subtasks || []).length > 0 ? 'pointer' : 'default' }}
+                            >
+                              {(habit.subtasks || []).length > 0 && (
+                                <ChevronRight className={`expand-toggle-icon ${expandedHabits[habit.id] ? 'expanded' : ''}`} />
+                              )}
                               <div className="habit-name" title={habit.name}>
                                 {habit.name}
                               </div>
                               {(habit.subtasks || []).length > 0 && (
-                                <span style={{ fontSize: '0.75rem', opacity: 0.6, marginLeft: '4px' }}>
+                                <span style={{ fontSize: '0.75rem', opacity: 0.6, marginLeft: '4px', flexShrink: 0 }}>
                                   ({(habit.subtasks || []).filter(s => !!(history[`${habit.id}_sub_${s.id}`]?.[todayStr])).length}/{(habit.subtasks || []).length})
                                 </span>
                               )}
@@ -690,7 +707,7 @@ export default function App() {
 
                           {/* Meta: Streaks dots + Action buttons */}
                           <div className="habit-meta">
-                            {/* 5-day Streak Circles */}
+                            {/* 5-day Streak Circles — larger, label inside */}
                             <div className="streak-grid">
                               {last5Days.map((day) => {
                                 const isDueOnDay = isHabitDueOnDate(habit, day.dateStr);
@@ -701,23 +718,19 @@ export default function App() {
                                   circleClass = 'done';
                                 } else if (dayStatus === 'missed' || dayStatus === false) {
                                   circleClass = 'missed';
-                                } else if (isDueOnDay) {
-                                  if (day.dateStr !== todayStr) {
-                                    circleClass = 'missed';
-                                  }
+                                } else if (isDueOnDay && day.dateStr !== todayStr) {
+                                  circleClass = 'missed';
                                 }
 
                                 return (
                                   <div 
                                     key={day.dateStr} 
-                                    className="streak-day-dot"
+                                    className={`streak-circle ${circleClass}`}
                                     onClick={() => handleStreakClick(habit.id, day.dateStr)}
-                                    title={`${day.dayName} (${day.dateStr}): ${circleClass === 'done' ? 'Done' : circleClass === 'missed' ? 'Missed' : 'Rest Day'}`}
+                                    title={`${day.dayName}: ${circleClass === 'done' ? 'Done' : circleClass === 'missed' ? 'Missed' : 'Pending'}`}
+                                    style={{ opacity: isDueOnDay ? 1 : 0.25 }}
                                   >
-                                    <div className={`streak-circle ${circleClass}`} style={{ opacity: isDueOnDay ? 1 : 0.25 }}>
-                                      {!isDueOnDay && <span style={{ fontSize: '7px', color: 'var(--text-muted)' }}>-</span>}
-                                    </div>
-                                    <span className="streak-label">{day.label}</span>
+                                    <span className="streak-label-inside">{day.label}</span>
                                   </div>
                                 );
                               })}
@@ -726,22 +739,15 @@ export default function App() {
                             {/* Quick details indicators */}
                             <div className="meta-indicators">
                               {habit.reminderTime && (
-                                <Clock className="meta-icon" title={`Reminder set for ${habit.reminderTime}`} />
+                                <Clock className="meta-icon" title={`Reminder: ${habit.reminderTime}${
+                                  habit.recurring === 'every-sunday' ? ' (Sundays)' 
+                                  : habit.recurring === 'every-x-days' ? ` (every ${habit.recurInterval} days)` 
+                                  : ' (daily)'
+                                }`} />
                               )}
                               {habit.recurring !== 'every-day' && (
-                                <Calendar className="meta-icon" title={habit.recurring === 'every-sunday' ? 'Sundays' : `Every ${habit.recurInterval} days`} />
+                                <Calendar className="meta-icon" title={habit.recurring === 'every-sunday' ? 'Sundays only' : `Every ${habit.recurInterval} days`} />
                               )}
-                              
-                              {/* Mobile menu dropdown to move between categories */}
-                              <select 
-                                className="select-input" 
-                                style={{ width: 'auto', padding: '1px', fontSize: '10px', border: 'none', background: 'transparent', cursor: 'pointer' }}
-                                value={category}
-                                onChange={(e) => moveHabitCategory(habit.id, e.target.value)}
-                                title="Move category"
-                              >
-                                {categories.map(c => <option key={c} value={c}>{c.substring(0,3)}</option>)}
-                              </select>
 
                               <button 
                                 className="habit-action-btn edit"
@@ -752,6 +758,8 @@ export default function App() {
                                   setNewHabitRecurring(habit.recurring);
                                   setNewHabitRecurInterval(habit.recurInterval || '2');
                                   setNewHabitReminderTime(habit.reminderTime || '');
+                                  setModalSubtasks(habit.subtasks || []);
+                                  setModalSubtaskInput('');
                                   setActiveModal('edit');
                                 }}
                                 title="Edit habit"
@@ -900,7 +908,11 @@ export default function App() {
               )}
 
               <div className="form-group">
-                <label className="form-label">Daily Reminder Time (Optional)</label>
+                <label className="form-label">
+                  {newHabitRecurring === 'every-sunday' ? 'Reminder Time (Sundays)' :
+                   newHabitRecurring === 'every-x-days' ? `Reminder Time (every ${newHabitRecurInterval} days)` :
+                   'Daily Reminder Time'} (Optional)
+                </label>
                 <input 
                   type="time" 
                   className="text-input"
@@ -909,8 +921,56 @@ export default function App() {
                 />
               </div>
 
+              {/* Sub-tasks in Add modal */}
+              <div className="form-group">
+                <label className="form-label">Sub-tasks (Optional)</label>
+                <div className="modal-subtask-list">
+                  {modalSubtasks.map((sub, idx) => (
+                    <div key={idx} className="modal-subtask-item">
+                      <span className="modal-subtask-name">{typeof sub === 'object' ? sub.name : sub}</span>
+                      <button 
+                        type="button" 
+                        className="habit-action-btn delete" 
+                        onClick={() => setModalSubtasks(prev => prev.filter((_, i) => i !== idx))}
+                      >×</button>
+                    </div>
+                  ))}
+                </div>
+                <div className="subtask-add-form" style={{ marginTop: '6px' }}>
+                  <input 
+                    type="text"
+                    className="subtask-input"
+                    placeholder="Add sub-task..."
+                    value={modalSubtaskInput}
+                    onChange={(e) => setModalSubtaskInput(e.target.value)}
+                    maxLength={40}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (modalSubtaskInput.trim()) {
+                          setModalSubtasks(prev => [...prev, modalSubtaskInput.trim()]);
+                          setModalSubtaskInput('');
+                        }
+                      }
+                    }}
+                  />
+                  <button 
+                    type="button" 
+                    className="subtask-add-btn"
+                    onClick={() => {
+                      if (modalSubtaskInput.trim()) {
+                        setModalSubtasks(prev => [...prev, modalSubtaskInput.trim()]);
+                        setModalSubtaskInput('');
+                      }
+                    }}
+                  >
+                    <Plus size={12} />
+                  </button>
+                </div>
+              </div>
+
               <div className="form-actions">
-                <button type="button" className="secondary-btn" onClick={() => setActiveModal(null)}>
+                <button type="button" className="secondary-btn" onClick={() => { setActiveModal(null); setModalSubtasks([]); setModalSubtaskInput(''); }}>
                   Cancel
                 </button>
                 <button type="submit" className="primary-btn">
@@ -988,7 +1048,11 @@ export default function App() {
               )}
 
               <div className="form-group">
-                <label className="form-label">Daily Reminder Time (Optional)</label>
+                <label className="form-label">
+                  {newHabitRecurring === 'every-sunday' ? 'Reminder Time (Sundays)' :
+                   newHabitRecurring === 'every-x-days' ? `Reminder Time (every ${newHabitRecurInterval} days)` :
+                   'Daily Reminder Time'} (Optional)
+                </label>
                 <input 
                   type="time" 
                   className="text-input"
@@ -997,8 +1061,56 @@ export default function App() {
                 />
               </div>
 
+              {/* Sub-tasks in Edit modal */}
+              <div className="form-group">
+                <label className="form-label">Sub-tasks</label>
+                <div className="modal-subtask-list">
+                  {modalSubtasks.map((sub, idx) => (
+                    <div key={idx} className="modal-subtask-item">
+                      <span className="modal-subtask-name">{typeof sub === 'object' ? sub.name : sub}</span>
+                      <button 
+                        type="button" 
+                        className="habit-action-btn delete" 
+                        onClick={() => setModalSubtasks(prev => prev.filter((_, i) => i !== idx))}
+                      >×</button>
+                    </div>
+                  ))}
+                </div>
+                <div className="subtask-add-form" style={{ marginTop: '6px' }}>
+                  <input 
+                    type="text"
+                    className="subtask-input"
+                    placeholder="Add sub-task..."
+                    value={modalSubtaskInput}
+                    onChange={(e) => setModalSubtaskInput(e.target.value)}
+                    maxLength={40}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (modalSubtaskInput.trim()) {
+                          setModalSubtasks(prev => [...prev, modalSubtaskInput.trim()]);
+                          setModalSubtaskInput('');
+                        }
+                      }
+                    }}
+                  />
+                  <button 
+                    type="button" 
+                    className="subtask-add-btn"
+                    onClick={() => {
+                      if (modalSubtaskInput.trim()) {
+                        setModalSubtasks(prev => [...prev, modalSubtaskInput.trim()]);
+                        setModalSubtaskInput('');
+                      }
+                    }}
+                  >
+                    <Plus size={12} />
+                  </button>
+                </div>
+              </div>
+
               <div className="form-actions">
-                <button type="button" className="secondary-btn" onClick={() => { setActiveModal(null); setEditingHabit(null); }}>
+                <button type="button" className="secondary-btn" onClick={() => { setActiveModal(null); setEditingHabit(null); setModalSubtasks([]); setModalSubtaskInput(''); }}>
                   Cancel
                 </button>
                 <button type="submit" className="primary-btn">
