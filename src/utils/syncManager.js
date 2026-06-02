@@ -113,14 +113,25 @@ export async function fetchStateFromCloud(syncCode) {
 
     if (!metaResponse.ok) return undefined; // Return undefined on network/server error
 
-    const metaData = await metaResponse.text();
+    let metaData = await metaResponse.text();
     
     // keyvalue.immanuel.co returns "value not found" or empty string when key doesn't exist
     if (!metaData || metaData === 'value not found' || metaData.trim() === '') {
       return null; // Return null when key does not exist
     }
 
-    const parts = metaData.trim().split('_');
+    // Strip ASP.NET JSON string quotes if returned
+    try {
+      metaData = JSON.parse(metaData);
+    } catch (e) {
+      metaData = metaData.trim();
+    }
+
+    if (!metaData || metaData === 'value not found' || metaData === '') {
+      return null;
+    }
+
+    const parts = metaData.split('_');
     if (parts.length !== 2) {
       return null;
     }
@@ -140,9 +151,14 @@ export async function fetchStateFromCloud(syncCode) {
         fetch(chunkUrl, { method: 'GET' })
           .then(async r => {
             if (!r.ok) throw new Error('Network error on chunk fetch');
-            const text = await r.text();
-            if (text.trim() === 'value not found') throw new Error('Chunk not found');
-            return text.trim();
+            let text = await r.text();
+            try {
+              text = JSON.parse(text);
+            } catch (e) {
+              text = text.trim();
+            }
+            if (text === 'value not found') throw new Error('Chunk not found');
+            return text;
           })
       );
     }

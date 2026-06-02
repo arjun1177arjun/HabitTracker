@@ -1,7 +1,7 @@
-const CACHE_NAME = 'habit-tracker-v2';
+const CACHE_NAME = 'habit-tracker-v3';
 const ASSETS = [
   './',
-  './index.html',
+  new Request('./index.html', { cache: 'reload' }),
   './manifest.json?v=2',
   './logo.svg',
 ];
@@ -33,13 +33,54 @@ self.addEventListener('fetch', (e) => {
   if (!e.request.url.startsWith(self.location.origin) || e.request.method !== 'GET') {
     return;
   }
+
+  const url = new URL(e.request.url);
+
+  // Network-First strategy for index.html or root paths to prevent stale asset hashes
+  if (url.pathname === '/' || url.pathname.endsWith('/index.html') || url.pathname.toLowerCase().includes('/habittracker/')) {
+    // Specifically intercept if it targets the HTML shell
+    if (!url.pathname.includes('.') || url.pathname.endsWith('.html') || url.pathname.endsWith('/')) {
+      e.respondWith(
+        fetch(e.request)
+          .then((response) => {
+            // Update the cache with the fresh network response
+            if (response.ok) {
+              const copy = response.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(e.request, copy));
+            }
+            return response;
+          })
+          .catch(() => {
+            // If network fails, return cached version
+            return caches.match(e.request);
+          })
+      );
+      return;
+    }
+  }
+
+  // Cache-First strategy for other assets (CSS, JS, images)
   e.respondWith(
     caches.match(e.request).then((cachedResponse) => {
-      return cachedResponse || fetch(e.request).catch(() => {
-        // Fallback for API calls or non-cached pages when offline
-        return new Response(JSON.stringify({ error: "Offline" }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      
+      // Not in cache, fetch from network
+      return fetch(e.request).then((response) => {
+        if (!response || response.status !== 200 || response.type !== 'basic') {
+          return response;
+        }
+
+        // Cache static built assets dynamically so they work offline
+        if (url.pathname.includes('/assets/')) {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(e.request, responseToCache);
+          });
+        }
+
+        return response;
       });
     })
   );
