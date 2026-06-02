@@ -71,18 +71,33 @@ export async function pushStateToCloud(syncCode, state) {
     const encoded = base64UrlEncode(serialized);
     if (!encoded) return false;
 
-    // keyvalue.immanuel.co uses a simple GET/POST path parameter to store the key
-    const url = `${API_BASE}/UpdateValue/${APP_KEY}/${syncCode}/${encoded}`;
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json'
-      }
+    // Split the encoded string into chunks of max 150 characters
+    const chunkSize = 150;
+    const chunks = [];
+    for (let i = 0; i < encoded.length; i += chunkSize) {
+      chunks.push(encoded.substring(i, i + chunkSize));
+    }
+
+    // Push all chunks in parallel
+    const pushPromises = chunks.map((chunk, index) => {
+      const chunkUrl = `${API_BASE}/UpdateValue/${APP_KEY}/${syncCode}_${index}/${chunk}`;
+      return fetch(chunkUrl, { method: 'POST' }).then(r => r.text());
     });
+
+    const results = await Promise.all(pushPromises);
+    const allChunksSuccess = results.every(res => res.trim() === 'True');
+    if (!allChunksSuccess) {
+      console.error('Failed to push some state chunks to cloud');
+      return false;
+    }
+
+    // Push metadata containing chunk count and lastUpdated timestamp
+    const metadata = `${chunks.length}_${state.lastUpdated || Date.now()}`;
+    const metaUrl = `${API_BASE}/UpdateValue/${APP_KEY}/${syncCode}/${metadata}`;
+    const metaResponse = await fetch(metaUrl, { method: 'POST' });
+    const metaText = await metaResponse.text();
     
-    const text = await response.text();
-    return text.trim() === 'True';
+    return metaText.trim() === 'True';
   } catch (e) {
     console.error('Cloud push failed:', e);
     return false;
@@ -93,28 +108,59 @@ export async function pushStateToCloud(syncCode, state) {
 export async function fetchStateFromCloud(syncCode) {
   if (!syncCode) return null;
   try {
-    const url = `${API_BASE}/GetValue/${APP_KEY}/${syncCode}`;
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json'
-      }
-    });
+    const metaUrl = `${API_BASE}/GetValue/${APP_KEY}/${syncCode}`;
+    const metaResponse = await fetch(metaUrl, { method: 'GET' });
 
-    if (!response.ok) return undefined; // Return undefined on network/server error
+    if (!metaResponse.ok) return undefined; // Return undefined on network/server error
 
-    const rawData = await response.text();
+    const metaData = await metaResponse.text();
     
     // keyvalue.immanuel.co returns "value not found" or empty string when key doesn't exist
-    if (!rawData || rawData === 'value not found' || rawData.trim() === '') {
+    if (!metaData || metaData === 'value not found' || metaData.trim() === '') {
       return null; // Return null when key does not exist
     }
 
-    // Decode the Base64URL string
-    const decoded = base64UrlDecode(rawData.trim());
-    if (!decoded) return null;
+    const parts = metaData.trim().split('_');
+    if (parts.length !== 2) {
+      return null;
+    }
 
-    return JSON.parse(decoded);
+    const chunksCount = parseInt(parts[0], 10);
+    const lastUpdated = parseInt(parts[1], 10);
+
+    if (isNaN(chunksCount) || isNaN(lastUpdated)) {
+      return null;
+    }
+
+    // Fetch all chunks in parallel
+    const chunkPromises = [];
+    for (let i = 0; i < chunksCount; i++) {
+      const chunkUrl = `${API_BASE}/GetValue/${APP_KEY}/${syncCode}_${i}`;
+      chunkPromises.push(
+        fetch(chunkUrl, { method: 'GET' })
+          .then(async r => {
+            if (!r.ok) throw new Error('Network error on chunk fetch');
+            const text = await r.text();
+            if (text.trim() === 'value not found') throw new Error('Chunk not found');
+            return text.trim();
+          })
+      );
+    }
+
+    try {
+      const chunkTexts = await Promise.all(chunkPromises);
+      const fullEncoded = chunkTexts.join('');
+      
+      const decoded = base64UrlDecode(fullEncoded);
+      if (!decoded) return null;
+
+      const parsed = JSON.parse(decoded);
+      parsed.lastUpdated = lastUpdated;
+      return parsed;
+    } catch (chunkError) {
+      console.error('Failed to fetch all state chunks:', chunkError);
+      return undefined; // Return undefined on chunk fetch failure
+    }
   } catch (e) {
     console.error('Cloud fetch failed:', e);
     return undefined; // Return undefined on network exception
