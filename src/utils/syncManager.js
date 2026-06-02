@@ -85,7 +85,7 @@ export async function pushStateToCloud(syncCode, state) {
     });
 
     const results = await Promise.all(pushPromises);
-    const allChunksSuccess = results.every(res => res.trim() === 'True');
+    const allChunksSuccess = results.every(res => res.trim().toLowerCase() === 'true');
     if (!allChunksSuccess) {
       console.error('Failed to push some state chunks to cloud');
       return false;
@@ -97,7 +97,7 @@ export async function pushStateToCloud(syncCode, state) {
     const metaResponse = await fetch(metaUrl, { method: 'POST' });
     const metaText = await metaResponse.text();
     
-    return metaText.trim() === 'True';
+    return metaText.trim().toLowerCase() === 'true';
   } catch (e) {
     console.error('Cloud push failed:', e);
     return false;
