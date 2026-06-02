@@ -1129,7 +1129,7 @@ export default function App() {
                           try {
                             new Notification('Alarm Working!', {
                               body: 'Your Habit Tracker notifications are successfully enabled!',
-                              icon: '/logo.svg'
+                              icon: './logo.svg'
                             });
                           } catch (e) {
                             console.error('Failed to trigger Notification:', e);

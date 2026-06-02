@@ -1,9 +1,9 @@
 const CACHE_NAME = 'habit-tracker-v1';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/logo.svg',
+  './',
+  './index.html',
+  './manifest.json',
+  './logo.svg',
 ];
 
 self.addEventListener('install', (e) => {
@@ -51,8 +51,8 @@ self.addEventListener('message', (event) => {
     const { title, body } = event.data;
     self.registration.showNotification(title, {
       body: body,
-      icon: '/logo.svg',
-      badge: '/logo.svg',
+      icon: './logo.svg',
+      badge: './logo.svg',
       vibrate: [200, 100, 200],
       tag: 'habit-reminder',
       renotify: true
