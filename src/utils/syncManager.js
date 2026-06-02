@@ -101,13 +101,13 @@ export async function fetchStateFromCloud(syncCode) {
       }
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) return undefined; // Return undefined on network/server error
 
     const rawData = await response.text();
     
     // keyvalue.immanuel.co returns "value not found" or empty string when key doesn't exist
     if (!rawData || rawData === 'value not found' || rawData.trim() === '') {
-      return null;
+      return null; // Return null when key does not exist
     }
 
     // Decode the Base64URL string
@@ -117,7 +117,7 @@ export async function fetchStateFromCloud(syncCode) {
     return JSON.parse(decoded);
   } catch (e) {
     console.error('Cloud fetch failed:', e);
-    return null;
+    return undefined; // Return undefined on network exception
   }
 }
 
@@ -128,8 +128,13 @@ export async function synchronizeStates(syncCode, localState) {
   try {
     const cloudState = await fetchStateFromCloud(syncCode);
     
+    // Case 0: Network error - abort sync, return localState as-is
+    if (cloudState === undefined) {
+      return localState;
+    }
+    
     // Case 1: Cloud is empty - upload local state
-    if (!cloudState) {
+    if (cloudState === null) {
       const updatedLocal = { ...localState, lastUpdated: Date.now() };
       await pushStateToCloud(syncCode, updatedLocal);
       saveLocalState(updatedLocal);

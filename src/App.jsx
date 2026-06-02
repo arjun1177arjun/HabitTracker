@@ -135,6 +135,12 @@ export default function App() {
     }
   }, [habits]);
 
+  // Keep a ref of the current state variables to avoid stale closures in polling/event handlers
+  const stateRef = useRef({ habits, history, lastUpdated });
+  useEffect(() => {
+    stateRef.current = { habits, history, lastUpdated };
+  }, [habits, history, lastUpdated]);
+
   // 3. Sync & Polling Manager
   useEffect(() => {
     // Clear existing timer
@@ -146,16 +152,17 @@ export default function App() {
     }
 
     const runSync = async () => {
+      const { habits: currentHabits, history: currentHistory, lastUpdated: currentLastUpdated } = stateRef.current;
       setSyncStatus('syncing');
       const currentState = {
         syncCode,
-        habits,
-        history,
-        lastUpdated
+        habits: currentHabits,
+        history: currentHistory,
+        lastUpdated: currentLastUpdated
       };
       
       const synced = await synchronizeStates(syncCode, currentState);
-      if (synced && synced.lastUpdated !== lastUpdated) {
+      if (synced && synced.lastUpdated !== currentLastUpdated) {
         setHabits(synced.habits || []);
         setHistory(synced.history || {});
         setLastUpdated(synced.lastUpdated);
@@ -187,7 +194,7 @@ export default function App() {
       if (pollingTimer.current) clearInterval(pollingTimer.current);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [syncCode, lastUpdated]);
+  }, [syncCode]);
 
   // Helper to trigger and update sync code
   const triggerSync = async (updatedHabits, updatedHistory) => {
