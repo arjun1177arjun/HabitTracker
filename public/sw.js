@@ -1,8 +1,8 @@
-const CACHE_NAME = 'habit-tracker-v1';
+const CACHE_NAME = 'habit-tracker-v2';
 const ASSETS = [
   './',
   './index.html',
-  './manifest.json',
+  './manifest.json?v=2',
   './logo.svg',
 ];
 
